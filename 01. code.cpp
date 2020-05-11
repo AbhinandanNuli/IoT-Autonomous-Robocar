@@ -27,10 +27,10 @@ Point2f Destination[] = {Point2f(100,0),Point2f(280,0),Point2f(100,240), Point2f
 
 
 //Machine Learning variables
-CascadeClassifier Stop_Cascade, Object_Cascade;
-Mat frame_Stop, RoI_Stop, gray_Stop, frame_Object, RoI_Object, gray_Object;
-vector<Rect> Stop, Object;
-int dist_Stop, dist_Object;
+CascadeClassifier Stop_Cascade, Object_Cascade, Traffic_Cascade;
+Mat frame_Stop, RoI_Stop, gray_Stop, frame_Object, RoI_Object, gray_Object, frame_Traffic, RoI_Traffic, gray_Traffic;
+vector<Rect> Stop, Object, Traffic;
+int dist_Stop, dist_Object, dist_Traffic;
 
  void Setup ( int argc,char **argv, RaspiCam_Cv &Camera )
   {
@@ -50,6 +50,7 @@ void Capture()
     Camera.retrieve( frame);
     cvtColor(frame, frame_Stop, COLOR_BGR2RGB);
     cvtColor(frame, frame_Object, COLOR_BGR2RGB);
+    cvtColor(frame, frame_Traffic, COLOR_BGR2RGB);
     cvtColor(frame, frame, COLOR_BGR2RGB);
     
 }
@@ -160,6 +161,38 @@ void Stop_detection()
     
 }
 
+void Traffic_detection()
+{
+    if(!Traffic_Cascade.load("//home//pi//Desktop//MACHINE LEARNING//Trafficc_cascade.xml"))
+    {
+	printf("Unable to open traffic cascade file");
+    }
+    
+    RoI_Traffic = frame_Traffic(Rect(200,0,200,140));
+    cvtColor(RoI_Traffic, gray_Traffic, COLOR_RGB2GRAY);
+    equalizeHist(gray_Traffic, gray_Traffic);
+    Traffic_Cascade.detectMultiScale(gray_Traffic, Traffic);
+    
+    for(int i=0; i<Traffic.size(); i++)
+    {
+	Point P1(Traffic[i].x, Traffic[i].y);
+	Point P2(Traffic[i].x + Traffic[i].width, Traffic[i].y + Traffic[i].height);
+	
+	rectangle(RoI_Traffic, P1, P2, Scalar(0, 0, 255), 2);
+	putText(RoI_Traffic, "Traffic Light", P1, FONT_HERSHEY_PLAIN, 1,  Scalar(0, 0, 255, 255), 2);
+	dist_Traffic = (-1.07)*(P2.x-P1.x) + 102.597;
+	
+       ss.str(" ");
+       ss.clear();
+       ss<<"D = "<<P2.x-P1.x<<"cm";
+       putText(RoI_Traffic, ss.str(), Point2f(1,130), 0,1, Scalar(0,0,255), 2);
+	
+    }
+    
+}
+
+
+
 
 void Object_detection()
 {
@@ -168,7 +201,7 @@ void Object_detection()
 	printf("Unable to open Object cascade file");
     }
     
-    RoI_Object = frame_Object(Rect(200,0,200,140));
+    RoI_Object = frame_Object(Rect(100,50,200,190));
     cvtColor(RoI_Object, gray_Object, COLOR_RGB2GRAY);
     equalizeHist(gray_Object, gray_Object);
     Object_Cascade.detectMultiScale(gray_Object, Object);
@@ -180,7 +213,7 @@ void Object_detection()
 	
 	rectangle(RoI_Object, P1, P2, Scalar(0, 0, 255), 2);
 	putText(RoI_Object, "Object", P1, FONT_HERSHEY_PLAIN, 1,  Scalar(0, 0, 255, 255), 2);
-	dist_Object = (-1.07)*(P2.x-P1.x) + 102.597;
+	dist_Object = (-0.48)*(P2.x-P1.x) + 56.6;
 	
        ss.str(" ");
        ss.clear();
@@ -225,6 +258,7 @@ int main(int argc,char **argv)
     LaneCenter();
     Stop_detection();
     Object_detection();
+    Traffic_detection();
     
     if (dist_Stop > 5 && dist_Stop < 20)
     {
@@ -238,9 +272,21 @@ int main(int argc,char **argv)
 	goto Stop_Sign;
     }
     
+        if (dist_Object > 5 && dist_Object < 30)
+    {
+	digitalWrite(21, 1);
+	digitalWrite(22, 0);    //decimal = 9
+	digitalWrite(23, 0);
+	digitalWrite(24, 1);
+	cout<<"Object"<<endl;
+	dist_Object = 0;
+	
+	goto Object;
+    }
+    
  
     
-    if (laneEnd > 3000)
+    if (laneEnd > 4500)
     {
        	digitalWrite(21, 1);
 	digitalWrite(22, 1);    //decimal = 7
@@ -315,9 +361,10 @@ int main(int argc,char **argv)
     }
     
     Stop_Sign:
+    Object:
     
     
-   if (laneEnd > 3000)
+   if (laneEnd > 4500)
     {
        ss.str(" ");
        ss.clear();
@@ -378,6 +425,11 @@ int main(int argc,char **argv)
     moveWindow("Object", 640, 580);
     resizeWindow("Object", 640, 480);
     imshow("Object", RoI_Object);
+    
+    namedWindow("Traffic", WINDOW_KEEPRATIO);
+    moveWindow("Traffic", 0, 580);
+    resizeWindow("Traffic", 640, 480);
+    imshow("Traffic", RoI_Traffic);
     
     
     waitKey(1);
